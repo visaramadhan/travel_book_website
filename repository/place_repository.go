@@ -3,79 +3,76 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/golang-generic/model"
 )
 
-type PlaceWithDate struct {
-	Place model.Place
-	Date  time.Time
-}
-
+// PlaceRepository is the interface for working with places, tours, and galleries.
 type PlaceRepository interface {
-	GetAllPlaces(limit, page int, sort, filter, date string) ([]PlaceWithDate, error)
+	GetPlaceWithTourAndGallery() ([]model.Place, error)
 }
 
+// placeRepository is a concrete implementation of the PlaceRepository interface.
 type placeRepository struct {
 	db *sql.DB
 }
 
+// NewPlaceRepository creates a new instance of PlaceRepository.
 func NewPlaceRepository(db *sql.DB) PlaceRepository {
 	return &placeRepository{db}
 }
 
-func (r *placeRepository) GetAllPlaces(limit, page int, sort, filter, date string) ([]PlaceWithDate, error) {
-	offset := (page - 1) * limit
+// GetPlaceWithTourAndGallery retrieves data about places, tours, and gallery photos.
+func (r *placeRepository) GetPlaceWithTourAndGallery() ([]model.Place, error) {
+	query := `
+		SELECT
+    p.id AS place_id,
+    p.name AS place_name,
+    p.description AS place_description,
+    p.photo AS place_thumbnail,
+    p.price AS place_price,
+    t.name AS tour_name,
+    t.date AS tour_date,
+    g.name AS gallery_name,
+    g.photo AS gallery_photo
+FROM
+    place p
+JOIN
+    tour t ON p.id = t.place_id
+JOIN (
+    SELECT 
+        g.id AS id,
+        g.name AS name,
+        g.photo AS photo,
+        g.id_place,
+        ROW_NUMBER() OVER (PARTITION BY g.id_place ORDER BY g.id) AS rn
+    FROM gallery g
+) g ON p.id = g.id_place
+WHERE g.rn <= 6
+ORDER BY t.date DESC;
 
-	orderBy := ""
-	if sort == "low-to-high" {
-		orderBy = "ORDER BY p.price ASC"
-	} else if sort == "high-to-low" {
-		orderBy = "ORDER BY p.price DESC"
-	}
-
-	dateFilter := ""
-	if date != "" {
-		dateFilter = fmt.Sprintf("AND t.date::date = '%s'", date)
-	}
-
-	filterQuery := ""
-	if filter == "all" {
-		filterQuery = ""
-	} else {
-		filterQuery = "WHERE p.name IS NOT NULL"
-	}
-
-	query := fmt.Sprintf(`SELECT p.id, p.name, p.description, p.photo, p.price, t.date 
-                          FROM Place p 
-                          LEFT JOIN Tour t ON p.id = t.place_id
-                          %s
-                          %s
-                          %s
-                          LIMIT %d OFFSET %d`, filterQuery, dateFilter, orderBy, limit, offset)
+	`
 
 	rows, err := r.db.Query(query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error executing query: %v", err)
 	}
 	defer rows.Close()
 
-	var places []PlaceWithDate
+	var places []model.Place
 	for rows.Next() {
 		var place model.Place
-		var date *time.Time
-		if err := rows.Scan(&place.ID, &place.Name, &place.Description, &place.Photo, &place.Price, &date); err != nil {
-
-			fmt.Println("Scanned date:", date)
-			return nil, err
+		err := rows.Scan(
+			&place.ID,
+			&place.Name,
+			&place.Description,
+			&place.Price,
+			&place.Photo,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning row: %v", err)
 		}
-		var placeWithDate PlaceWithDate
-		placeWithDate.Place = place
-		if date != nil {
-			placeWithDate.Date = *date
-		}
-		places = append(places, placeWithDate)
+		places = append(places, place)
 	}
 
 	return places, nil

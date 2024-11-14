@@ -1,19 +1,24 @@
 package service
 
-import "github.com/golang-generic/repository"
+import (
+	"github.com/golang-generic/model"
+	"github.com/golang-generic/repository"
+)
 
+// PlaceService is the service for working with places, tours, and galleries.
 type PlaceService interface {
-	GetAllPlaces(limit, page int, sort, filter, date string) ([]repository.PlaceWithDate, error)
+	GetPlaceWithTourAndGallery() ([]model.Place, error)
 }
 
 type placeService struct {
-	placeRepo repository.PlaceRepository
+	repo repository.PlaceRepository
 }
 
-func NewPlaceService(placeRepo repository.PlaceRepository) PlaceService {
-	return &placeService{placeRepo}
+// NewPlaceService creates a new instance of PlaceService.
+func NewPlaceService(repo repository.PlaceRepository) PlaceService {
+	return &placeService{repo}
 }
 
-func (s *placeService) GetAllPlaces(limit, page int, sort, filter, date string) ([]repository.PlaceWithDate, error) {
-	return s.placeRepo.GetAllPlaces(limit, page, sort, filter, date)
+func (s *placeService) GetPlaceWithTourAndGallery() ([]model.Place, error) {
+	return s.repo.GetPlaceWithTourAndGallery()
 }
